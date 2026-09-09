@@ -1,4 +1,4 @@
 # ArcaShield CodeSec-AI — dépendances (Python 3.11+)
-streamlit>=1.63,<2.0
-google-genai>=1.0.0
-python-dotenv>=1.0.1
+streamlit==1.63.0
+google-genai==2.22.0
+python-dotenv==1.2.3
