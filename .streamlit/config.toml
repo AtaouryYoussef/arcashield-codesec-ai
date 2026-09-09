@@ -1,0 +1,17 @@
+# Thème visuel ArcaShield CodeSec-AI
+# Fond très sombre + accent bleu bouclier (#4A9EFF) + texte blanc cassé.
+[theme]
+base = "dark"
+primaryColor = "#4A9EFF"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#151B24"
+textColor = "#E8EDF2"
+# Streamlit ne permet que sans serif / serif / monospace ici :
+# la police moderne (Inter) est chargée via CSS injecté dans app.py.
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+maxUploadSize = 5
