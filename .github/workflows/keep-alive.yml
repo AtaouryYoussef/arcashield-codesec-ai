@@ -1,0 +1,59 @@
+name: Keep Streamlit app awake
+
+# Empêche l'application Streamlit Community Cloud d'entrer en "sleep mode"
+# (déclenché après ~12 h sans trafic) en simulant une visite régulière.
+
+on:
+  schedule:
+    # Toutes les 6 heures (minute 0). Heure UTC.
+    - cron: "0 */6 * * *"
+  # Permet de lancer le workflow à la main depuis l'onglet "Actions" pour tester.
+  workflow_dispatch:
+
+# Un seul run à la fois ; annule un run précédent encore en cours.
+concurrency:
+  group: keep-alive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    name: Ping l'application
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      # 👇 URL publique de l'application (modifiable ici si elle change).
+      APP_URL: "https://arcashield.streamlit.app/"
+      # User-agent réaliste : le user-agent par défaut de curl est parfois filtré.
+      USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+
+    steps:
+      - name: Requête GET vers l'application Streamlit
+        run: |
+          echo "Ping de : $APP_URL"
+
+          # -s : silencieux         -S : affiche quand même les erreurs
+          # -L : suit les redirections
+          # --max-time 30 : timeout global de 30 s
+          # -A : user-agent réaliste
+          # -o /dev/null : on ignore le corps de la réponse
+          # -w '%{http_code}' : on récupère uniquement le code HTTP final
+          HTTP_CODE=$(curl -sS -L \
+            --max-time 30 \
+            -A "$USER_AGENT" \
+            -o /dev/null \
+            -w '%{http_code}' \
+            "$APP_URL") || {
+              echo "::error::La requête curl a échoué (timeout, DNS ou réseau) pour $APP_URL"
+              exit 1
+            }
+
+          echo "Code HTTP reçu : $HTTP_CODE"
+
+          # On considère 2xx et 3xx comme "en vie". Tout le reste = échec.
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 400 ]; then
+            echo "✅ L'application répond correctement (HTTP $HTTP_CODE)."
+          else
+            echo "::error::L'application n'a pas répondu correctement : HTTP $HTTP_CODE pour $APP_URL"
+            exit 1
+          fi
