@@ -182,10 +182,14 @@ with st.sidebar:
     )
     st.divider()
     st.subheader("Configuration")
-    if config.GEMINI_API_KEY and config.GEMINI_API_KEY.strip():
+    if config.resolve_api_key():
         st.success("Clé API Gemini détectée.", icon="✅")
     else:
-        st.error("Clé API Gemini absente (`.env`).", icon="⚠️")
+        st.error(
+            "Clé API Gemini absente — configurez le fichier `.env` en local "
+            "ou *Settings → Secrets* sur Streamlit Cloud.",
+            icon="⚠️",
+        )
     st.caption(f"Modèle : `{config.GEMINI_MODEL}`")
     st.divider()
     st.caption(

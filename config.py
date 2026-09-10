@@ -5,14 +5,16 @@ Ce module charge les variables d'environnement depuis le fichier `.env`
 l'application : clé API, modèle Gemini, langages supportés, sévérités,
 seuils de score et palette de couleurs.
 
-La clé API n'est JAMAIS écrite en dur : elle provient exclusivement de
-la variable d'environnement `GEMINI_API_KEY`.
+La clé API n'est JAMAIS écrite en dur : elle provient soit des secrets
+Streamlit (`st.secrets`, déploiement Community Cloud), soit de la
+variable d'environnement `GEMINI_API_KEY` (fichier `.env` en local).
 """
 
 from __future__ import annotations
 
 import os
 
+import streamlit as st
 from dotenv import load_dotenv
 
 # Charge le .env situé à la racine du projet (sans écraser les variables
@@ -23,7 +25,9 @@ load_dotenv(override=False)
 # --------------------------------------------------------------------------- #
 # API Gemini
 # --------------------------------------------------------------------------- #
-GEMINI_API_KEY: str | None = os.getenv("GEMINI_API_KEY")
+# La clé API est résolue à la demande par `resolve_api_key()` / `get_api_key()`
+# (voir plus bas) afin de couvrir à la fois `st.secrets` (Streamlit Community
+# Cloud) et la variable d'environnement `GEMINI_API_KEY` (fichier `.env` local).
 
 # Modèle par défaut : rapide, large fenêtre de contexte, suffisant pour du SAST.
 # Surchargeable via .env (GEMINI_MODEL).
@@ -37,19 +41,57 @@ class ConfigError(RuntimeError):
     """Erreur de configuration (ex. clé API absente)."""
 
 
-def get_api_key() -> str:
-    """Retourne la clé API Gemini ou lève une erreur explicite.
+def resolve_api_key() -> str | None:
+    """Résout la clé API Gemini sans effet de bord sur l'interface.
 
-    Utilisé par le client Gemini au moment de l'appel, pour éviter de
-    faire planter l'application au démarrage si la clé est absente.
+    Ordre de résolution :
+      1. ``st.secrets["GEMINI_API_KEY"]`` -> déploiement Streamlit Community
+         Cloud. L'accès lève ``StreamlitSecretsNotFoundError`` s'il n'existe
+         pas de ``secrets.toml`` (cas normal en local) ou ``KeyError`` si la
+         clé est absente ; les deux sont ignorés au profit du fallback.
+      2. ``os.getenv("GEMINI_API_KEY")`` -> développement local ; la valeur
+         provient du fichier `.env` chargé par ``load_dotenv()`` à l'import
+         de ce module.
+
+    Retourne la clé nettoyée, ou ``None`` si aucune source ne la fournit.
     """
-    if not GEMINI_API_KEY or not GEMINI_API_KEY.strip():
-        raise ConfigError(
-            "Clé API Gemini introuvable. Créez un fichier `.env` à la racine "
-            "du projet contenant :\n\n    GEMINI_API_KEY=votre_cle_ici\n\n"
-            "Vous pouvez partir du modèle `.env.example`."
-        )
-    return GEMINI_API_KEY.strip()
+    try:
+        secret_key = st.secrets["GEMINI_API_KEY"]
+        if secret_key and secret_key.strip():
+            return secret_key.strip()
+    except Exception:
+        pass
+
+    env_key = os.getenv("GEMINI_API_KEY")
+    if env_key and env_key.strip():
+        return env_key.strip()
+
+    return None
+
+
+def get_api_key() -> str:
+    """Retourne la clé API Gemini, quel que soit l'environnement.
+
+    Utilisé par le client Gemini au moment de l'appel. Si aucune clé n'est
+    trouvée, affiche un message d'erreur explicite via ``st.error()`` et
+    interrompt proprement l'exécution du script Streamlit.
+    """
+    api_key = resolve_api_key()
+    if api_key:
+        return api_key
+
+    st.error(
+        "**Clé API Gemini introuvable.**\n\n"
+        "- **En local :** créez un fichier `.env` à la racine du projet "
+        "contenant `GEMINI_API_KEY=votre_cle` (voir `.env.example`).\n"
+        "- **Sur Streamlit Community Cloud :** ajoutez-la dans "
+        "*Manage app → Settings → Secrets* sous la forme "
+        '`GEMINI_API_KEY = "votre_cle"`.',
+        icon="🔑",
+    )
+    st.stop()
+    # Jamais atteint sous Streamlit ; garde-fou si appelé hors contexte.
+    raise ConfigError("Clé API Gemini introuvable.")
 
 
 # --------------------------------------------------------------------------- #
